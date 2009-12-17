@@ -13,11 +13,13 @@ class Snarl
   # characters to work corretly -- if you know a better way please
   # send me (phurley@gmail.com) a note.
   module SnarlAPI
-    extend DL::Importable
-    dlload 'User32.dll'
-    extern "HWND FindWindow(const char*, const char*)"
-    extern "BOOL IsWindow(HWND)"
-    extern "int SendMessage(HWND, uint, uint, void*)"
+
+    extend FFI::EZ
+
+    ffi_lib 'user32'
+    attach_ez 'FindWindow', [:string, :string] => :pointer
+    attach_ez 'IsWindow', [:pointer] => :bool
+    attach_ez 'SendMessage', [:pointer, :uint, :uint, :pointer] => :int
     #extern "HWND CreateWindowEx(DWORD, LPCSTR, LPCSTR, DWORD, int, int, HWND, HMENU, HINSTANCE, LPVOID)"
     
     CreateWindow = Win32API.new("user32", "CreateWindowExA", ['L', 'p', 'p', 'l', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'p'], 'L')
@@ -57,30 +59,39 @@ class Snarl
     SNARL_TEXT_LENGTH = 1024
     WM_COPYDATA = 0x4a
     
-    BaseSnarlStruct = [
-      "int cmd",
-      "long id",
-      "long timeout",
-      "long data2",
-      "char title[#{SNARL_TEXT_LENGTH}]",
-      "char text[#{SNARL_TEXT_LENGTH}]", 
-      "char icon[#{SNARL_TEXT_LENGTH}]",                     
-    ]
-  
-    SnarlStruct = struct BaseSnarlStruct
     
-    SnarlStructEx = struct BaseSnarlStruct + [
-    	"char snarl_class[#{SNARL_TEXT_LENGTH}]",
-    	"char extra[#{SNARL_TEXT_LENGTH}]",
-    	"char extra2[#{SNARL_TEXT_LENGTH}]",
-    	"int reserved1",
-    	"int reserved2"]
+             base = [:cmd, :int,
+              :id, :long,
+              :timeout, :long,
+              :data2, :long,
+              :title, :pointer, 8*SNARL_TEXT_LENGTH,
+              :text, :pointer, 8*SNARL_TEXT_LENGTH
+              :icon, :pointer, 8*SNARL_TEXT_LENGTH,
+            ]
+    
+    class BaseSnarlStruct < FFI::Struct
+      layout (*base)
+    end
+    
+    class SnarlStruct < BaseSnarlStruct; end
+    
+    class SnarlStructEx < FFI::Struct
+      all = base + [
+      :snarl_class, :pointer, 8*SNARL_TEXT_LENGTH,
+      :extra, :pointer, 8*SNARL_TEXT_LENGTH,
+      :extra2, :pointer, 8*SNARL_TEXT_LENGTH,
+      :reserved1, :int,
+      :reserved2, :int
+      ]
+      layout *all
+    end
+      
   
-    CopyDataStruct = struct [
-      "long dwData",
-      "long cbData",
-      "void* lpData",
-    ]
+    class CopyDataStruct < FFI::Struct
+      layout :dwData, :long,
+             :cbData, :long,
+             :lpData, :pointer
+    end
     
         
     # character array hoop jumping, we take the passed string and convert

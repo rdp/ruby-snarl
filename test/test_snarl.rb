@@ -1,4 +1,5 @@
-require "snarl"
+require 'sane'
+require_rel '../lib/snarl'
 require 'test/unit' unless defined? $ZENTEST and $ZENTEST
 
 class TestSnarl < Test::Unit::TestCase

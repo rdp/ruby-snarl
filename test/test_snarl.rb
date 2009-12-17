@@ -1,5 +1,5 @@
 require "snarl"
-# require 'test/unit' unless defined? $ZENTEST and $ZENTEST
+require 'test/unit' unless defined? $ZENTEST and $ZENTEST
 
 class TestSnarl < Test::Unit::TestCase
 
@@ -25,7 +25,7 @@ class TestSnarl < Test::Unit::TestCase
   
   def test_update_api
     assert(s = Snarl.new('title'))
-    assert(s.update('new title'))    
+    assert(s.update('new title')) # not sure why this one fails in test, not in debug...
     assert(s.update('title', 'msg')) 
       
     assert_raises(TypeError) { s.update('title', 'msg', 0) } 
@@ -42,6 +42,6 @@ class TestSnarl < Test::Unit::TestCase
     
   # this one is a little fragile, but it passes right now...
   def test_version
-    assert_equal("1.1", Snarl.version)
+    assert Snarl.version >= '1.1'
   end
 end

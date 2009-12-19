@@ -3,6 +3,12 @@ require "Win32API"
 
 require 'ffi_ez'
 
+class Fixnum # 1.8.6 compat
+ def ord
+  self
+ end
+end
+
 # Snarl (http://www.fullphat.net/snarl.html) is a simple notification system, 
 # similar to Growl under OSX. This is a simple pure Ruby wrapper to the 
 # native API.
@@ -10,17 +16,19 @@ require 'ffi_ez'
 class FFI::Struct # ltodo add to ez
   
   def copy_chars(to_field, string)
-    string.each_byte.with_index{|b, i|
+    i = 0
+    string.each_byte{|b| 
       self[to_field][i] = string[i].ord
+      i += 1
     }
     self[to_field][string.length] = 0
     # todo assert we don't tramp :)
   end
   
    def method_missing(*args) # like a.value = "b"
-     name = args[0]
+     name = args[0].to_s
      value = args[1]
-     if name[-1] == '='
+     if name[-1..-1] == '='
        name = name[0..-2].to_sym 
        self[name] = value
      else

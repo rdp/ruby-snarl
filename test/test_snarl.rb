@@ -1,4 +1,6 @@
-require "../lib/snarl"
+require 'rubygems' if RUBY_VERSION < '1.9'
+require 'sane'
+require_rel '../lib/snarl'
 require 'test/unit' unless defined? $ZENTEST and $ZENTEST
 
 class TestSnarl < Test::Unit::TestCase

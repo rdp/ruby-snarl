@@ -6,7 +6,6 @@ class TestSnarl < Test::Unit::TestCase
   def test_new_api
     assert(Snarl.new('title'))
     assert(Snarl.new('title', 'msg')) 
-      
     assert_raises(TypeError) { Snarl.new('title', 'msg', 0) } 
     assert(Snarl.new('title', 'msg', nil)) 
     assert(Snarl.new('title', 'msg', 'missing_file'))
@@ -14,7 +13,6 @@ class TestSnarl < Test::Unit::TestCase
   end
 
   def test_show_api
-    _dbg
     assert(Snarl.show_message('title'))
     assert(Snarl.show_message('title', 'msg')) 
       
@@ -43,7 +41,6 @@ class TestSnarl < Test::Unit::TestCase
     
   # this one is a little fragile, but it passes right now...
   def test_version
-    _dbg
     assert Snarl.version >= '1.1'
   end
 end

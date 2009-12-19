@@ -22,12 +22,7 @@ class FFI::Struct # ltodo add to ez
      value = args[1]
      if name[-1] == '='
        name = name[0..-2].to_sym 
-       begin
-         self[name] = value
-      rescue TypeError
-        _dbg
-        3
-      end
+       self[name] = value
      else
       self[name] # like a.value
      end
@@ -86,8 +81,7 @@ class Snarl
     SNARL_SET_TIMEOUT = 12
     SNARL_EX_SHOW = 32
     SNARL_TEXT_LENGTH = 1024
-    WM_COPYDATA = 0x4a
-    
+    WM_COPYDATA = 0x4a    
     
     BASE = [:cmd, :int,
               :id, :long,
@@ -96,11 +90,10 @@ class Snarl
               :title, [:char, SNARL_TEXT_LENGTH],
               :text,  [:char, SNARL_TEXT_LENGTH],
               :icon,  [:char, SNARL_TEXT_LENGTH]
-     ]
-            
+     ]            
             
     
-    class BaseSnarlStruct < FFI::Struct
+    class SnarlStruct < FFI::Struct
       layout(*BASE)
       def set_title(title)
         copy_chars(:title, title);
@@ -113,20 +106,17 @@ class Snarl
       end
     end
     
-    class SnarlStruct < BaseSnarlStruct; end
-    
     class SnarlStructEx < FFI::Struct
       all = BASE + [
-      :snarl_class,  [:char, SNARL_TEXT_LENGTH],
-      :extra, [:char, SNARL_TEXT_LENGTH],
-      :extra2, [:char, SNARL_TEXT_LENGTH],
-      :reserved1, :int,
-      :reserved2, :int
+        :snarl_class,  [:char, SNARL_TEXT_LENGTH],
+        :extra, [:char, SNARL_TEXT_LENGTH],
+        :extra2, [:char, SNARL_TEXT_LENGTH],
+        :reserved1, :int,
+        :reserved2, :int
       ]
       layout(*all)
     end
-        
-  
+    
     class CopyDataStruct < FFI::Struct
       layout :dwData, :long,
              :cbData, :long,
@@ -154,11 +144,11 @@ class Snarl
         cd.dwData = 2
         cd.cbData = ss.size
         cd.lpData = ss.to_ptr
-        _dbg
          [:pointer, :uint, :long, :long]
         got = sendMessage(hwnd, WM_COPYDATA, 0, cd.to_ptr)
         _dbg unless got
-        3
+        got
+        
       end
     end
   end
@@ -244,7 +234,6 @@ class Snarl
     ss = SnarlAPI::SnarlStruct.new
     ss.cmd = SNARL_GET_VERSION
     version = SnarlAPI.send(ss)
-    _dbg
     "#{version >> 16}.#{version & 0xffff}"
   end
   

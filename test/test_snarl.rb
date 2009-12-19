@@ -1,5 +1,4 @@
-require 'sane'
-require_rel '../lib/snarl'
+require "../lib/snarl"
 require 'test/unit' unless defined? $ZENTEST and $ZENTEST
 
 class TestSnarl < Test::Unit::TestCase
@@ -15,6 +14,7 @@ class TestSnarl < Test::Unit::TestCase
   end
 
   def test_show_api
+    _dbg
     assert(Snarl.show_message('title'))
     assert(Snarl.show_message('title', 'msg')) 
       
@@ -43,6 +43,7 @@ class TestSnarl < Test::Unit::TestCase
     
   # this one is a little fragile, but it passes right now...
   def test_version
+    _dbg
     assert Snarl.version >= '1.1'
   end
 end

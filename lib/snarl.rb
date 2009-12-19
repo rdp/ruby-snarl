@@ -1,10 +1,40 @@
-require 'dl/import'
-require 'dl/struct'
-require 'dl/win32'
+require "Win32API" 
+# how does this relate to require 'win32/api' #Win32API = Win32::API
+
+require 'ffi_ez'
 
 # Snarl (http://www.fullphat.net/snarl.html) is a simple notification system, 
 # similar to Growl under OSX. This is a simple pure Ruby wrapper to the 
-#native API (using DL).
+# native API.
+
+class FFI::Struct # ltodo add to ez
+  
+  def copy_chars(to_field, string)
+    string.each_byte.with_index{|b, i|
+      self[to_field][i] = string[i].ord
+    }
+    self[to_field][string.length] = 0
+    # todo assert we don't tramp :)
+  end
+  
+   def method_missing(*args) # like a.value = "b"
+     name = args[0]
+     value = args[1]
+     if name[-1] == '='
+       name = name[0..-2].to_sym 
+       begin
+         self[name] = value
+      rescue TypeError
+        _dbg
+        3
+      end
+     else
+      self[name] # like a.value
+     end
+   end
+
+end
+
 class Snarl
   
   # This is the lowlevel API implemenation using DL and a few handy 
@@ -17,11 +47,10 @@ class Snarl
     extend FFI::EZ
 
     ffi_lib 'user32'
-    attach_ez 'FindWindow', [:string, :string] => :pointer
-    attach_ez 'IsWindow', [:pointer] => :bool
-    attach_ez 'SendMessage', [:pointer, :uint, :uint, :pointer] => :int
+    attach_ez 'FindWindowA' => :findWindow, [:string, :string] => :pointer
+    attach_ez 'IsWindow' => :isWindow, [:pointer] => :bool
+    attach_ez 'SendMessageA' => :sendMessage, [:pointer, :uint, :long, :pointer] => :int
     #extern "HWND CreateWindowEx(DWORD, LPCSTR, LPCSTR, DWORD, int, int, HWND, HMENU, HINSTANCE, LPVOID)"
-    
     CreateWindow = Win32API.new("user32", "CreateWindowExA", ['L', 'p', 'p', 'l', 'L', 'L', 'L', 'L', 'L', 'L', 'L', 'p'], 'L')
     DestroyWindow = Win32API.new("user32", "DestroyWindow", ['L'], 'L')
     
@@ -40,7 +69,7 @@ class Snarl
     SNARL_NOTIFICATION_CLICKED = 32
     SNARL_NOTIFICATION_TIMED_OUT = 33
     SNARL_NOTIFICATION_ACK = 34
-    SNARL_NOTIFICATION_CANCLED = SNARL_NOTIFICATION_CLICKED #yes that's right.
+    SNARL_NOTIFICATION_CANCLED = SNARL_NOTIFICATION_CLICKED # yes that's right.
     
     #Snarl Commands
     SNARL_SHOW = 1
@@ -60,32 +89,43 @@ class Snarl
     WM_COPYDATA = 0x4a
     
     
-             base = [:cmd, :int,
+    BASE = [:cmd, :int,
               :id, :long,
               :timeout, :long,
               :data2, :long,
-              :title, :pointer, 8*SNARL_TEXT_LENGTH,
-              :text, :pointer, 8*SNARL_TEXT_LENGTH
-              :icon, :pointer, 8*SNARL_TEXT_LENGTH,
-            ]
+              :title, [:char, SNARL_TEXT_LENGTH],
+              :text,  [:char, SNARL_TEXT_LENGTH],
+              :icon,  [:char, SNARL_TEXT_LENGTH]
+     ]
+            
+            
     
     class BaseSnarlStruct < FFI::Struct
-      layout (*base)
+      layout(*BASE)
+      def set_title(title)
+        copy_chars(:title, title);
+      end
+      def set_text(text)
+        copy_chars(:text, text)
+      end
+      def set_icon(icon)
+        copy_chars(:icon, icon)
+      end
     end
     
     class SnarlStruct < BaseSnarlStruct; end
     
     class SnarlStructEx < FFI::Struct
-      all = base + [
-      :snarl_class, :pointer, 8*SNARL_TEXT_LENGTH,
-      :extra, :pointer, 8*SNARL_TEXT_LENGTH,
-      :extra2, :pointer, 8*SNARL_TEXT_LENGTH,
+      all = BASE + [
+      :snarl_class,  [:char, SNARL_TEXT_LENGTH],
+      :extra, [:char, SNARL_TEXT_LENGTH],
+      :extra2, [:char, SNARL_TEXT_LENGTH],
       :reserved1, :int,
       :reserved2, :int
       ]
-      layout *all
+      layout(*all)
     end
-      
+        
   
     class CopyDataStruct < FFI::Struct
       layout :dwData, :long,
@@ -100,6 +140,7 @@ class Snarl
     # I do this as it seems necessary to fit the DL API, if there is a 
     # better way please let me know
     def self.to_cha(str)
+      raise 'bad'
       result = str.split(/(.)/).map { |ch| ch[0] }.compact
       result + Array.new(SNARL_TEXT_LENGTH - result.size, 0)
     end
@@ -109,11 +150,15 @@ class Snarl
     # based upon the cmd being sent
     def self.send(ss)
       if isWindow(hwnd = findWindow(nil, 'Snarl'))
-        cd = CopyDataStruct.malloc
+        cd = CopyDataStruct.new
         cd.dwData = 2
         cd.cbData = ss.size
         cd.lpData = ss.to_ptr
-        sendMessage(hwnd, WM_COPYDATA, 0, cd.to_ptr)
+        _dbg
+         [:pointer, :uint, :long, :long]
+        got = sendMessage(hwnd, WM_COPYDATA, 0, cd.to_ptr)
+        _dbg unless got
+        3
       end
     end
   end
@@ -127,15 +172,27 @@ class Snarl
   # path. The timeout file has a default value (DEFAULT_TIMEOUT -> 3 seconds)
   # but can be set to Snarl::NO_TIMEOUT, to force a manual acknowledgement
   # of the notification.
-  def initialize(title, options = {:snarl_class => nil, :msg => " ", :timeout => DEFAULT_TIMEOUT, :icon => nil, :extra => nil})
+  def initialize(title, *options)
+    # allow both ways of calling it...
+  	if options && !options[0].is_a?(Hash)
+  	  options2 = {}
+  	  options2[:msg] = options.shift
+  	  options2[:timeout] = options.shift
+  	  options2[:icon] = options.shift
+  	  raise unless options.empty?
+  	 options = options2
+  else
+    options = options[0] || {}
+  end
+  options = {:snarl_class => nil, :msg => " ", :timeout => DEFAULT_TIMEOUT, :icon => nil, :extra => nil}.merge(options)
+  
+  if options[:extra] && options[:snarl_class].nil? then raise ArgumentError.new("Must specificy a snarl_class to use sound notifications") end
   	
-  	if options[:extra] && options[:snarl_class].nil? then raise ArgumentError.new("Must specificy a snarl_class to use sound notifications") end
-  	
-  	if options[:snarl_class].nil? then
-    	@ss = SnarlStruct.malloc
+  if options[:snarl_class].nil? then
+    	@ss = SnarlStruct.new
     	show(title, options)
 	else
-		@ss = SnarlStructEx.malloc
+		@ss = SnarlStructEx.new
 		show(title, options)
 	end
   end
@@ -159,11 +216,11 @@ class Snarl
   # of the notification.
   def update(title,msg=" ",icon=nil, timeout=DEFAULT_TIMEOUT)
     @ss.cmd = SNARL_UPDATE
-    @ss.title = SnarlAPI.to_cha(title)
-    @ss.text = SnarlAPI.to_cha(msg)
+    @ss.set_title(title)
+    @ss.set_text(msg)
     if icon
       icon = File.expand_path(icon)
-      @ss.icon = SnarlAPI.to_cha(icon) if File.exist?(icon.to_s)
+      @ss.set_icon(icon) if File.exist?(icon.to_s)
     end
     @ss.timeout = timeout
     send?    
@@ -184,16 +241,17 @@ class Snarl
   # Return the current version of snarl (not the snarl gem) as a character
   # string "1.0" format
   def self.version
-    ss = SnarlAPI::SnarlStruct.malloc
+    ss = SnarlAPI::SnarlStruct.new
     ss.cmd = SNARL_GET_VERSION
     version = SnarlAPI.send(ss)
+    _dbg
     "#{version >> 16}.#{version & 0xffff}"
   end
   
   # Return the current build number of snarl (not the snarl gem)
   # If zero will call the original version.
   def self.versionex
-  	ssx = SnarlAPI::SnarlStructEx.malloc
+  	ssx = SnarlAPI::SnarlStructEx.new
   	ssx.cmd = SNARL_GET_VERSION_EX
   	versionex = SnarlAPI.send(ssx);
   	if versionex == 0 then
@@ -213,12 +271,12 @@ class Snarl
   #We return the message_only window we create.
   #NOTE: We do not support config windows.
   def self.registerconfig(title, icon=nil)
-  	ss = SnarlAPI::SnarlStruct.malloc
-  	ss.title = SnarlAPI.to_cha(title)
+  	ss = SnarlAPI::SnarlStruct.new
+  	ss.set_title(title)
   	ss.cmd = SNARL_REGISTER_CONFIG_WINDOW
   	ss.id = WM_USER
   	if not icon.nil? then
-  		ss.icon = SnarlAPI.to_cha(icon) if File.exist?(icon)
+  		ss.set_icon(icon) if File.exist?(icon)
   		ss.cmd = SNARL_REGISTER_CONFIG_WINDOW_2
   	end
   	
@@ -230,7 +288,7 @@ class Snarl
   
   #Unregister application, passing in the value returned from registerconfig
   def self.revokeconfig(hWnd)
-  	ss = SnarlAPI::SnarlStruct.malloc
+  	ss = SnarlAPI::SnarlStruct.new
   	ss.data2 = hWnd
   	ss.cmd = SNARL_REVOKE_CONFIG_WINDOW
   	SnarlAPI.send(ss)
@@ -239,9 +297,9 @@ class Snarl
   
   #Register an alert for [app] using the name [text]
   def self.registeralert(app, text)
-  	ss = SnarlAPI::SnarlStruct.malloc
-  	ss.title = SnarlAPI.to_cha(app)
-  	ss.text = SnarlAPI.to_cha(text)
+  	ss = SnarlAPI::SnarlStruct.new
+  	ss.set_title(app)
+  	ss.set_text(tex)
   	ss.cmd = SNARL_REGSITER_ALERT
   	SnarlAPI.send(ss)
   end
@@ -253,7 +311,7 @@ class Snarl
   	
   	options[:timeout] = DEFAULT_TIMEOUT if options[:timeout].nil?
   	options[:msg] = " " if options[:msg].nil?
-  	
+      	
   	if options[:snarl_class].nil? then 
   		@ss.cmd = SNARL_SHOW 
   	else 
@@ -261,22 +319,22 @@ class Snarl
   		@ss.snarl_class = options[:snarl_class]
   	end
     
-    @ss.title = SnarlAPI.to_cha(title)
-    @ss.text = SnarlAPI.to_cha(options[:msg])
+    @ss.set_title(title)
+    @ss.set_text(options[:msg])
         
     if options[:icon]
       #Expand Path in Cygwin causes the cygwin path to be returned (ie /cygdrive/c/blah) this is not what we want
       #as Snarl is running in windows and expects a C:\blah path.  We've told them to use an absolute path anyway.
       #options[:icon] = File.expand_path(options[:icon])
-      @ss.icon = SnarlAPI.to_cha(options[:icon]) if File.exist?(options[:icon].to_s)
+      @ss.set_icon(options[:icon]) if File.exist?(options[:icon].to_s)
     end
     
     if options[:extra]
     	unless options[:extra][0] == 43
     		#options[:extra] = File.expand_path(options[:extra]) 
-    		@ss.extra = SnarlAPI.to_cha(options[:extra]) if File.exist?(options[:extra].to_s)
+    		@ss.set_extra(options[:extra]) if File.exist?(options[:extra].to_s)
     	else
-    		@ss.extra = SnarlAPI.to_cha(options[:extra])
+    		@ss.set_extra(options[:extra])
     	end
     end
     
